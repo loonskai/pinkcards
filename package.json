@@ -1,0 +1,12 @@
+{
+  "name": "pinkcards",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -k -n api,ui -c blue,magenta \"uv run --project backend uvicorn app.api:app --app-dir backend --reload --port 8000\" \"npm --prefix ui run dev\"",
+    "install:all": "npm install && npm --prefix ui install && uv sync --project backend",
+    "test": "uv run --project backend pytest backend/tests"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}

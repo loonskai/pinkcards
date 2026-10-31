@@ -1,0 +1,27 @@
+:root { font-family: system-ui, sans-serif; color: #222; background: #f6f6f8; }
+body { margin: 0; }
+.app { max-width: 920px; margin: 0 auto; padding: 12px; }
+.statusbar { display: flex; gap: 8px; flex-wrap: wrap; position: sticky; top: 0; background: #f6f6f8; padding: 6px 0; z-index: 1; }
+.pill { padding: 3px 10px; border-radius: 12px; font-size: 13px; }
+.pill.ok { background: #d8f3dc; } .pill.bad { background: #ffd6d6; }
+.toolbar, .filters { display: flex; gap: 8px; align-items: center; margin: 10px 0; flex-wrap: wrap; }
+.reason, .muted { color: #777; font-size: 13px; }
+.msg { background: #fff8d6; padding: 6px 10px; border-radius: 6px; font-size: 13px; word-break: break-all; }
+button { padding: 5px 10px; border: 1px solid #bbb; border-radius: 6px; background: #fff; cursor: pointer; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+button.active { background: #222; color: #fff; } button.primary { background: #2b8a3e; color: #fff; border-color: #2b8a3e; }
+button.danger { color: #c92a2a; }
+.card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin: 10px 0; }
+.card.approved { border-left: 4px solid #2b8a3e; } .card.failed { border-left: 4px solid #c92a2a; }
+.card-head { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+.badge { background: #eee; border-radius: 4px; padding: 1px 6px; font-size: 12px; }
+.badge.warn { background: #ffe8a1; } .badge.bad { background: #ffc9c9; }
+.preview { background: #fdfdfd; border: 1px dashed #ccc; padding: 10px 14px; border-radius: 6px; cursor: pointer; font-size: 18px; }
+.cloze { color: #1c7ed6; font-weight: 600; } .section { margin-top: 8px; font-size: 16px; }
+.section.note { color: #666; font-size: 14px; }
+.reviewer { margin-top: 6px; }
+.errors { background: #ffe3e3; color: #a61e1e; padding: 4px 8px; border-radius: 4px; font-size: 13px; margin: 4px 0; }
+.actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
+.edit { display: grid; gap: 6px; } .edit label { display: grid; font-size: 12px; color: #555; gap: 2px; }
+.edit label.inline { display: flex; align-items: center; gap: 6px; }
+.edit textarea, .edit input, input.small { padding: 5px; font: inherit; } .row { display: flex; gap: 10px; }

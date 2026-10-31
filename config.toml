@@ -1,0 +1,48 @@
+[store]
+db_path = "./data/anki-cloze.db"
+backup_dir = "./backups"        # point at a synced/off-device folder
+backup_keep = 20
+
+[sync]
+max_cards_per_sync = 50
+
+[readwise]
+# "tag:<name>", "color:<name>", or alternatives joined with "|" (e.g. "tag:pink|color:pink").
+# UNVERIFIED: confirm with `uv run anki-cloze inspect readwise`.
+pink_filter = "tag:pink"
+
+[zotero]
+base_url = "http://localhost:23119/api/users/0"
+pink_color = ""                 # fill from `inspect zotero` (annotationColor, e.g. "#e56eee"); sync of Zotero is skipped while empty
+
+[gsheets]
+service_account_file = "./secrets/google_service_account.json"
+range = "A:B"                   # header row skipped in code
+sheet_name = ""                 # optional; empty = first sheet
+
+[gsheets.sheets]                # language -> spreadsheet id
+# pl = "..."
+# fr = "..."
+# en = "..."
+
+[generator]
+provider = "openrouter"
+model = "anthropic/claude-opus-4.8"   # pinned; must support structured outputs (4.1 does not -> 404). $5/$25 per 1M tokens
+prompt_version = "v1"
+
+[anki]
+connect_url = "http://localhost:8765"
+note_type = "Cloze"
+expected_fields = ["Text", "Expression", "Translation", "Picture", "HINT", "NOTE"]
+
+[anki.decks]
+pl = "Polish"
+fr = "French"
+en = "English"
+
+[apkg]
+model_id = 1660407719467        # notetype id from the owner's Polish.apkg export
+export_dir = "./exports"
+
+[lang]
+native = "ru"
