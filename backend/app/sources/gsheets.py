@@ -15,10 +15,18 @@ class SheetsAccessError(RuntimeError):
     """Human-readable problem reading a sheet / the key file."""
 
 
+# Row 1 is skipped only if column A looks like a header, so a word typed into A1 isn't silently dropped.
+HEADER_NAMES = {"expression", "expressions", "word", "words", "phrase", "słowo", "mot", "term", "vocabulary"}
+
+
+def _is_header(row: list[str]) -> bool:
+    return bool(row) and row[0].strip().lower() in HEADER_NAMES
+
+
 def rows_to_notes(rows: list[list[str]], spreadsheet_id: str, language: str) -> list[SourceNote]:
     notes: dict[str, SourceNote] = {}
     for i, row in enumerate(rows):
-        if i == 0:  # header
+        if i == 0 and _is_header(row):
             continue
         expr = (row[0] if row else "").strip()
         if not expr:
@@ -96,10 +104,11 @@ class GsheetsSource(SourceAdapter):
         return res.get("values", [])
 
     def health(self) -> tuple[bool, str]:
-        if not self.s.gsheets.sheets:
-            return False, "no spreadsheets configured"
         if not self.key_path.exists():
             return False, f"service account key not found: {self.key_path}"
+        if not self.s.gsheets.sheets:
+            return False, (f"key OK, but no spreadsheets configured: add ids under [gsheets.sheets] in config.toml "
+                           f"and share each sheet with {self.client_email()} as Viewer")
         problems = []
         for lang, sid in self.s.gsheets.sheets.items():
             try:

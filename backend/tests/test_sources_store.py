@@ -17,6 +17,18 @@ def test_sheets_identity_stable():
     assert all(n.language_hint == "pl" for n in a)
 
 
+def test_sheets_row1_header_only_if_it_looks_like_one():
+    assert [n.text for n in rows_to_notes([["Bonjour"], ["Merci"]], "S", "fr")] == ["Bonjour", "Merci"]
+    assert [n.text for n in rows_to_notes([["Expression", "Comment"], ["Merci"]], "S", "fr")] == ["Merci"]
+    assert [n.text for n in rows_to_notes([["expression"], ["Merci"]], "S", "fr")] == ["Merci"]
+
+
+def test_sheet_words_jump_the_queue(store):
+    store.upsert_source_notes([SourceNote(source="readwise", source_id=str(i), text="w") for i in range(3)])
+    store.upsert_source_notes([SourceNote(source="gsheets", source_id="S:a", text="a", language_hint="fr")])
+    assert store.pending_notes(2)[0]["id"] == "gsheets:S:a"
+
+
 def test_upsert_idempotent_and_status_preserved(store):
     n = SourceNote(source="gsheets", source_id="S:dom", text="dom", language_hint="pl")
     assert store.upsert_source_notes([n]) == 1

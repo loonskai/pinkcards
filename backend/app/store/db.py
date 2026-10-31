@@ -103,7 +103,8 @@ class Store:
 
     def pending_notes(self, limit: int) -> list[dict]:
         rows = self.conn.execute(
-            "SELECT * FROM source_notes WHERE status='pending' ORDER BY fetched_at, id LIMIT ?", (limit,)
+            "SELECT * FROM source_notes WHERE status='pending' "
+            "ORDER BY (source='gsheets') DESC, fetched_at, id LIMIT ?", (limit,)
         ).fetchall()
         return [_row(r) for r in rows]
 
