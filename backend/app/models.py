@@ -62,6 +62,43 @@ class Grammar(BaseModel):
     aspect_pair: str | None = None
 
 
+class Contraction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    form: str
+    parts: str
+
+
+class DetailWord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    form: str
+    base: str = ""
+    note_ru: str = ""
+
+
+class Construction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    explanation_ru: str
+
+
+class Etymology(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text_ru: str
+    confidence: Literal["high", "medium", "low"]
+
+
+class Details(BaseModel):
+    """Per-language learning notes about the sentence (rendered into NOTE by generator/note.py)."""
+
+    model_config = ConfigDict(extra="forbid")
+    contractions: list[Contraction] = Field(default_factory=list)
+    words: list[DetailWord] = Field(default_factory=list)
+    construction: Construction | None = None
+    etymology: Etymology | None = None
+
+    def is_empty(self) -> bool:
+        return not (self.contractions or self.words or self.construction or self.etymology)
+
+
 class GeneratedCard(BaseModel):
     """Schema the LLM must return (see generator/schema.py)."""
 
@@ -77,3 +114,4 @@ class GeneratedCard(BaseModel):
     translation: str
     hint: str = ""
     meaning_gloss_ru: str
+    details: Details | None = None

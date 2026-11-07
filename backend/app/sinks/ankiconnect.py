@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import base64
+from pathlib import Path
+
 import httpx
 
 from ..config import Settings
@@ -41,6 +44,10 @@ class AnkiConnect(Sink):
             problems.append(f"note type {a.note_type!r} not found")
         else:
             fields = self.invoke("modelFieldNames", modelName=a.note_type)
+            if "Audio" in a.expected_fields and "Audio" not in fields:
+                problems.append(f"add a field named Audio to note type {a.note_type!r} and put {{{{Audio}}}} on the "
+                                "back template -- see README")
+                fields = fields + ["Audio"]  # compare the rest below without reporting Audio twice
             if fields != a.expected_fields:
                 hint = ""
                 if a.note_type == "Cloze":
@@ -77,9 +84,31 @@ class AnkiConnect(Sink):
         except AnkiConnectError:
             return False
 
+    @staticmethod
+    def _plain(html_text: str) -> str:
+        import html as _h
+        import re
+        t = re.sub(r"<\s*(br|/p|/div|/li)\s*/?>", " ", html_text or "", flags=re.I)  # line breaks -> space
+        t = re.sub(r"<[^>]*>", "", t)  # inline tags (<b>, <i>) vanish without leaving a gap
+        return re.sub(r"\s+", " ", _h.unescape(t)).strip()
+
+    def find_note_ids(self, deck: str, expression: str, text: str) -> list[int]:
+        """Notes in `deck` whose Expression was searched and whose Text field equals `text` (markup/whitespace
+        insensitive). The search is only a pre-filter; the Text comparison is what decides."""
+        ids = self.invoke("findNotes", query=self.find_query(deck, expression))
+        if not ids:
+            return []
+        want = self._plain(text)
+        out = []
+        for n in self.invoke("notesInfo", notes=ids):
+            if self._plain((n.get("fields", {}).get("Text") or {}).get("value", "")) == want:
+                out.append(n["noteId"])
+        return out
+
     def _fields(self, c: dict) -> dict:
         return {"Text": c["text"], "Expression": c["expression"], "Translation": c["translation"],
-                "Picture": "", "HINT": c.get("hint") or "", "NOTE": c.get("note") or ""}
+                "Picture": "", "HINT": c.get("hint") or "", "NOTE": c.get("note") or "",
+                "Audio": f"[sound:{c['audio_file']}]" if c.get("audio_file") else ""}
 
     def push(self, cards: list[dict]) -> list[PushResult]:
         problems = self.check()
@@ -92,12 +121,16 @@ class AnkiConnect(Sink):
                 out.append(PushResult(c["id"], False, error="invalid cloze: " + "; ".join(errs)))
                 continue
             try:
+                if c.get("audio_file"):  # explicit storeMediaFile gives clearer errors than addNote's `audio`
+                    path = self.s.audio_dir / Path(c["audio_file"]).name
+                    self.invoke("storeMediaFile", filename=c["audio_file"],
+                                data=base64.b64encode(path.read_bytes()).decode())
                 nid = self.invoke("addNote", note={
                     "deckName": c["deck"], "modelName": self.s.anki.note_type,
                     "fields": self._fields(c), "tags": c.get("tags") or [],
                     "options": {"allowDuplicate": False, "duplicateScope": "deck"},
                 })
                 out.append(PushResult(c["id"], True, anki_note_id=nid))
-            except AnkiConnectError as e:
+            except (AnkiConnectError, OSError) as e:
                 out.append(PushResult(c["id"], False, error=str(e)))
         return out

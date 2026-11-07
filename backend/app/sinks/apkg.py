@@ -40,17 +40,27 @@ class ApkgSink(Sink):
             raise RuntimeError("templates not loaded")
         model = self._model()
         decks: dict[str, genanki.Deck] = {}
+        media: list[str] = []
         for c in cards:
             d = decks.setdefault(c["deck"], genanki.Deck(self._deck_id(c["deck"]), c["deck"]))
+            audio = ""
+            if c.get("audio_file"):
+                path = self.s.audio_dir / Path(c["audio_file"]).name
+                if path.is_file():
+                    media.append(str(path))
+                    audio = f"[sound:{path.name}]"
             d.add_note(genanki.Note(
                 model=model,
-                fields=[c["text"], c["expression"], c["translation"], "", c.get("hint") or "", c.get("note") or ""],
+                fields=[c["text"], c["expression"], c["translation"], "", c.get("hint") or "", c.get("note") or "",
+                        audio],
                 tags=[t.replace(" ", "_") for t in (c.get("tags") or [])],
                 guid=genanki.guid_for(c["text"], c["expression"]),
             ))
         out_dir = self.s.path(self.s.apkg.export_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         path = out_dir / f"cards-{datetime.now():%Y%m%d-%H%M%S}.apkg"
-        genanki.Package(list(decks.values())).write_to_file(str(path))
+        pkg = genanki.Package(list(decks.values()))
+        pkg.media_files = media
+        pkg.write_to_file(str(path))
         self.last_path = path
         return [PushResult(c["id"], True) for c in cards]

@@ -63,5 +63,5 @@ def test_source_lines():
 
 def test_build_note_owner_example():
     n = build_note("osiągnąć cel", False, {"aspect_pair": "osiągać / osiągnąć"}, "gsheets", None, None)
-    assert n == "Base form: osiągać / osiągnąć cel<br>Notes"
-    assert build_note("dom", True, {}, "readwise", "T", "A") == "T — A · Kindle"
+    assert n == 'Base form: osiągać / osiągnąć cel<br><div class="pc-source">Notes</div>'
+    assert build_note("dom", True, {}, "readwise", "T", "A") == '<div class="pc-source">T — A · Kindle</div>'

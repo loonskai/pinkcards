@@ -23,6 +23,10 @@ export function CardView({ card, selected, onToggle, onChange, onReload, onMsg }
   const [regen, setRegen] = useState("");
   const [lang, setLang] = useState("");
   const [busy, setBusy] = useState(false);
+  const [audioBusy, setAudioBusy] = useState(false);
+  const [audioMsg, setAudioMsg] = useState("");
+  const [notesBusy, setNotesBusy] = useState(false);
+  const [notesMsg, setNotesMsg] = useState("");
 
   const guard = async (fn: () => Promise<any>) => {
     setBusy(true);
@@ -37,6 +41,45 @@ export function CardView({ card, selected, onToggle, onChange, onReload, onMsg }
   const setG = (k: string, v: string) => set("grammar", { ...g, [k]: v || null });
 
   const save = () => guard(async () => { onChange(await api.edit(card.id, draft)); setDraft({}); setEditing(false); });
+  const regenAudio = async () => {
+    setAudioBusy(true); setAudioMsg("");
+    try {
+      const { anki, ...updated } = await api.regenerateAudio(card.id);
+      onChange(updated as Card);
+      if (updated.audio_error) setAudioMsg("");
+      else if (!["sent", "exported"].includes(card.status)) setAudioMsg("Audio regenerated.");
+      else if (anki?.updated) setAudioMsg("Audio regenerated; Anki note updated.");
+      else setAudioMsg(`Audio regenerated, but the Anki note was NOT updated: ${anki?.error ?? anki?.reason ?? "unknown"}`);
+    } catch (e) { setAudioMsg(String(e)); }
+    setAudioBusy(false);
+  };
+  const regenNotes = async () => {
+    setNotesBusy(true); setNotesMsg("");
+    try {
+      const { anki, details_error, ...updated } = await api.regenerateDetails(card.id);
+      onChange(updated as Card);
+      if (details_error) setNotesMsg(`Notes not regenerated: ${details_error}`);
+      else if (!["sent", "exported"].includes(card.status)) setNotesMsg("Notes regenerated.");
+      else if (anki?.updated) setNotesMsg("Notes regenerated; Anki note updated.");
+      else setNotesMsg(`Notes regenerated, but the Anki note was NOT updated: ${anki?.error ?? anki?.reason ?? "unknown"}`);
+    } catch (e) { setNotesMsg(String(e)); }
+    setNotesBusy(false);
+  };
+  const canRegenNotes = card.details_enabled && !!card.text && valid && card.status !== "rejected";
+  const resend = async () => {
+    setNotesBusy(true); setNotesMsg("");
+    try {
+      const { anki, ...updated } = await api.resendToAnki(card.id);
+      onChange(updated as Card);
+      setNotesMsg(anki.updated ? `Anki note updated (notes${anki.audio ? " + audio" : ""}).`
+        : `Anki note NOT updated: ${anki.error ?? anki.reason ?? "unknown"}`);
+    } catch (e) { setNotesMsg(String(e)); }
+    setNotesBusy(false);
+  };
+  const delivered = ["sent", "exported"].includes(card.status);
+  const play = () => { if (audioSrc) void new Audio(audioSrc).play(); };
+  const audioSrc = card.audio_url ? `${card.audio_url}?v=${card.audio_text_hash ?? ""}` : null;
+  const canRegenAudio = card.audio_enabled && ["approved", "failed", "sent", "exported"].includes(card.status) && !!card.text && valid;
   const act = (fn: () => Promise<Card>) => guard(async () => { onChange(await fn()); });
 
   return (
@@ -45,12 +88,14 @@ export function CardView({ card, selected, onToggle, onChange, onReload, onMsg }
         {card.status === "generated" && <input type="checkbox" checked={selected} onChange={onToggle} disabled={!valid} />}
         <span className="badge">{card.kind}</span>
         {card.language_confidence === "low" && <span className="badge warn">low confidence: {card.language_reason}</span>}
+        {card.details_stale && <span className="badge warn" title="the sentence was edited after the notes were generated">notes are stale — sentence changed</span>}
         {card.already_known === 1 && <span className="badge warn">already known</span>}
         {card.status === "failed" && <span className="badge bad">failed</span>}
         <span className="muted">{card.deck ?? "no deck"} · #{card.id}</span>
       </div>
 
       {card.error && <div className="errors">{card.error}</div>}
+      {card.audio_error && <div className="errors">Audio: {card.audio_error}</div>}
       {live.length > 0 && <div className="errors">{live.join("; ")}</div>}
 
       {card.text && !editing && (
@@ -59,6 +104,11 @@ export function CardView({ card, selected, onToggle, onChange, onReload, onMsg }
           <div className="section" dangerouslySetInnerHTML={{ __html: card.translation ?? "" }} />
           {card.hint && <div className="section">{card.hint}</div>}
           {flip && card.note && <div className="section note" dangerouslySetInnerHTML={{ __html: card.note }} />}
+          {flip && audioSrc && (
+            <div className="section audio" onClick={(e) => e.stopPropagation()}>
+              <button className="play" onClick={play} title="Play">▶ Play</button>
+            </div>
+          )}
         </div>
       )}
       {card.text && !editing && (
@@ -85,6 +135,33 @@ export function CardView({ card, selected, onToggle, onChange, onReload, onMsg }
           <p className="muted">NOTE is rebuilt on save from base form / grammar.</p>
           <button className="primary" disabled={busy || clozeIssues(c.text ?? "").length > 0} onClick={save}>Save</button>
           <button onClick={() => { setEditing(false); setDraft({}); }}>Cancel</button>
+        </div>
+      )}
+
+      {!editing && (audioSrc || canRegenAudio) && (
+        <div className="audiobar">
+          {audioSrc && !flip && <audio controls preload="none" src={audioSrc} />}
+          {canRegenAudio && (
+            <button disabled={busy || audioBusy} onClick={regenAudio}>
+              {audioBusy && <span className="spinner" />}{audioBusy ? "Generating audio…" : "Regenerate audio"}
+            </button>
+          )}
+          {audioMsg && <span className="muted">{audioMsg}</span>}
+        </div>
+      )}
+
+      {!editing && (canRegenNotes || (delivered && !!card.text)) && (
+        <div className="audiobar">
+          {canRegenNotes && (
+            <button disabled={busy || notesBusy} onClick={regenNotes}>
+              {notesBusy && <span className="spinner" />}{notesBusy ? "Working…" : "Regenerate notes"}
+            </button>
+          )}
+          {delivered && (
+            <button disabled={busy || notesBusy} onClick={resend}
+              title="Re-send NOTE and audio to the Anki note (no new LLM/TTS call)">Resend to Anki</button>
+          )}
+          {notesMsg && <span className="muted">{notesMsg}</span>}
         </div>
       )}
 

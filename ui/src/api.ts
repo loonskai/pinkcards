@@ -5,7 +5,8 @@ export type Card = {
   grammar: { gender?: string | null; article?: string | null; aspect_pair?: string | null } | null;
   translation: string | null; hint: string | null; note: string | null; tags: string[] | null;
   deck: string | null; meaning_gloss_ru: string | null; already_known: number; status: string;
-  error: string | null; validation_errors: string[]; flagged: boolean;
+  error: string | null; audio_url: string | null; audio_error: string | null; audio_enabled: boolean;
+  audio_text_hash: string | null; details_enabled: boolean; details_stale: boolean; validation_errors: string[]; flagged: boolean;
 };
 export type Check = { label: string; ok: boolean; message: string };
 export type Status = {
@@ -40,6 +41,12 @@ export const api = {
   language: (id: number, language: string) => req<Card>("POST", `/api/cards/${id}/language`, { language }),
   anotherMeaning: (id: number) => req<Card>("POST", `/api/cards/${id}/another-meaning`),
   newForm: (id: number) => req<Card>("POST", `/api/cards/${id}/new-form`),
+  regenerateAudio: (id: number) => req<Card & { anki: { updated: boolean; error?: string; reason?: string } | null }>(
+    "POST", `/api/cards/${id}/regenerate-audio`),
+  regenerateDetails: (id: number) => req<Card & { anki: { updated: boolean; error?: string; reason?: string } | null; details_error: string | null }>(
+    "POST", `/api/cards/${id}/regenerate-details`),
+  resendToAnki: (id: number) => req<Card & { anki: { updated: boolean; audio?: boolean; error?: string; reason?: string } }>(
+    "POST", `/api/cards/${id}/resend-to-anki`),
   push: () => req<{ sent: number; failed: number }>("POST", "/api/push"),
   exportApkg: () => req<any>("POST", "/api/export"),
   confirmExport: () => req<any>("POST", "/api/export/confirm"),

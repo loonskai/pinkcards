@@ -61,7 +61,7 @@ def test_5xx_retried(settings):
 
 class FakeAnki:
     def __init__(self, fields=None, decks=("Polish", "French", "English")):
-        self.fields = fields or ["Text", "Expression", "Translation", "Picture", "HINT", "NOTE"]
+        self.fields = fields or ["Text", "Expression", "Translation", "Picture", "HINT", "NOTE", "Audio"]
         self.decks, self.added = decks, []
     def handler(self, req):
         b = json.loads(req.content); a = b["action"]; p = b["params"]
@@ -79,7 +79,7 @@ def _anki(settings, fake):
 def test_startup_checks(settings):
     assert _anki(settings, FakeAnki()).check() == []
     p = _anki(settings, FakeAnki(fields=["Text", "Back Extra"])).check()
-    assert p and "clash" in p[0]
+    assert any("clash" in x for x in p)
     assert any("French" in x for x in _anki(settings, FakeAnki(decks=("Polish", "English"))).check())
 
 

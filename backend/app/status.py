@@ -3,7 +3,7 @@ from __future__ import annotations
 from .config import Settings
 
 
-def collect_status(settings: Settings, sources: dict, generator, anki) -> dict:
+def collect_status(settings: Settings, sources: dict, generator, anki, tts=None) -> dict:
     checks = {}
     names = {"readwise": "Readwise", "zotero": "Zotero", "gsheets": "Google"}
     for k, src in sources.items():
@@ -12,10 +12,13 @@ def collect_status(settings: Settings, sources: dict, generator, anki) -> dict:
     ok, msg = anki.health() if anki else (False, "not configured")
     checks["anki"] = {"label": "AnkiConnect", "ok": ok, "message": msg, "action": None}
     ok, msg = generator.health()
+    gen_ok = ok
+    if ok and tts is not None:  # TTS shares the OpenRouter pill (no separate indicator) but never blocks Sync
+        ok, msg = tts.health()
     checks["openrouter"] = {"label": "OpenRouter", "ok": ok, "message": msg, "action": None}
     sources_up = [k for k in sources if checks[k]["ok"]]
-    sync_ok = checks["openrouter"]["ok"] and bool(sources_up)
-    sync_reason = None if sync_ok else ("OpenRouter down" if not checks["openrouter"]["ok"] else "no source reachable")
+    sync_ok = gen_ok and bool(sources_up)
+    sync_reason = None if sync_ok else ("OpenRouter down" if not gen_ok else "no source reachable")
     push_ok = checks["anki"]["ok"]
     return {"checks": checks,
             "sync": {"enabled": sync_ok, "reason": sync_reason},

@@ -22,23 +22,50 @@ sheet_name = ""                 # optional; empty = first sheet
 
 [gsheets.sheets]                # language -> spreadsheet id
 # pl = "..."
-# fr = "..."
+fr = "1G6dcZa8OTO4MxjKqthwzTnvhaFZcr-QSMudiCFz9Tf4"
 # en = "..."
 
 [generator]
 provider = "openrouter"
 model = "anthropic/claude-opus-4.8"   # pinned; must support structured outputs (4.1 does not -> 404). $5/$25 per 1M tokens
-prompt_version = "v1"
+prompt_version = "v2"
 
 [anki]
 connect_url = "http://localhost:8765"
 note_type = "Cloze"
-expected_fields = ["Text", "Expression", "Translation", "Picture", "HINT", "NOTE"]
+expected_fields = ["Text", "Expression", "Translation", "Picture", "HINT", "NOTE", "Audio"]
 
 [anki.decks]
 pl = "Polish"
 fr = "French"
 en = "English"
+
+[tts]
+model = "google/gemini-3.8-flash-tts"   # exact OpenRouter speech model id; list them with `uv run anki-cloze inspect tts`
+format = "mp3"                  # Gemini TTS only returns PCM; it is converted to mp3 locally
+audio_dir = "./data/audio"      # git-ignored, not in DB backups (audio can always be regenerated)
+
+[tts.languages.fr]
+enabled = true
+voice = "Kore"                  # one of the model's supported_voices; pick by ear from `inspect tts` samples
+
+[tts.languages.pl]
+enabled = false
+voice = ""
+
+[tts.languages.en]
+enabled = false
+voice = ""
+
+[details]                       # grammar / word notes appended to NOTE (generated at Sync, LLM-only)
+[details.languages.fr]
+enabled = true
+
+[details.languages.pl]
+enabled = false
+
+[details.languages.en]
+enabled = false
 
 [apkg]
 model_id = 1660407719467        # notetype id from the owner's Polish.apkg export

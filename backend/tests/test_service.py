@@ -46,7 +46,7 @@ def test_sync_flow_and_dedup(settings, store):
     assert (r["generated"], r["failed"], r["unsupported"]) == (1, 1, 1)
     c = store.list_cards("generated")[0]
     assert c["deck"] == "Polish" and c["tags"] == ["auto", "src::sheets"]
-    assert c["note"] == "Base form: skakać / skoczyć<br>Notes"
+    assert c["note"] == 'Base form: skakać / skoczyć<br><div class="pc-source">Notes</div>'
     assert store.get_source_note("gsheets:S:xx")["status"] == "unsupported"
 
     # second sync creates nothing new
@@ -74,7 +74,7 @@ def test_edit_rebuilds_note_and_requires_reapproval(settings, store):
     c = store.list_cards()[0]
     svc.approve([c["id"]])
     out = svc.edit(c["id"], expression="dom", grammar={"gender": "m"}, is_base_form=False)
-    assert out["note"] == "Base form: dom (m.)<br>Notes" and out["status"] == "generated"
+    assert out["note"] == 'Base form: dom (m.)<br><div class="pc-source">Notes</div>' and out["status"] == "generated"
     bad = svc.edit(c["id"], text="no cloze")
     assert bad["validation_errors"] and svc.approve([c["id"]])["refused"]
 

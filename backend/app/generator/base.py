@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
-from ..models import GeneratedCard
+from ..models import Details, GeneratedCard
 
 
 @dataclass
@@ -20,6 +20,7 @@ class GenerationRequest:
     regen_instruction: str | None = None
     force_language: str | None = None  # "change language"
     lemma: str | None = None           # for new_form / another_meaning children
+    details_languages: list[str] | None = None  # languages with `details` enabled (None = feature off)
 
 
 class GenerationError(Exception):
@@ -33,6 +34,10 @@ class Generator(ABC):
     @abstractmethod
     def generate(self, req: GenerationRequest) -> GeneratedCard:
         """Return a schema-valid card or raise GenerationError."""
+
+    def generate_details(self, card: dict) -> Details | None:
+        """Notes for an existing card (never changes the sentence). Raise GenerationError on failure."""
+        raise NotImplementedError
 
     @abstractmethod
     def health(self) -> tuple[bool, str]: ...

@@ -7,10 +7,10 @@ import httpx
 from pydantic import ValidationError
 
 from ..config import Settings
-from ..models import GeneratedCard
+from ..models import Details, GeneratedCard
 from .base import GenerationError, GenerationRequest, Generator
-from .prompt import SYSTEM_V1, build_user_prompt
-from .schema import CARD_JSON_SCHEMA
+from .prompt import DETAILS_SYSTEM, SYSTEM_V2, build_details_prompt, build_user_prompt
+from .schema import CARD_JSON_SCHEMA, DETAILS_JSON_SCHEMA
 from .validate import validate_card
 
 URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -37,11 +37,11 @@ class OpenRouterGenerator(Generator):
         except httpx.HTTPError as e:
             return False, str(e)
 
-    def _call(self, messages: list[dict]) -> str:
+    def _call(self, messages: list[dict], schema: dict = CARD_JSON_SCHEMA) -> str:
         body = {
             "model": self.model,
             "messages": messages,
-            "response_format": {"type": "json_schema", "json_schema": CARD_JSON_SCHEMA},
+            "response_format": {"type": "json_schema", "json_schema": schema},
             "provider": {"require_parameters": True},
         }
         last: Exception | None = None
@@ -71,7 +71,7 @@ class OpenRouterGenerator(Generator):
         return str(e)
 
     def generate(self, req: GenerationRequest) -> GeneratedCard:
-        messages = [{"role": "system", "content": SYSTEM_V1},
+        messages = [{"role": "system", "content": SYSTEM_V2},
                     {"role": "user", "content": build_user_prompt(req)}]
         error = ""
         for attempt in range(2):  # schema/validation failure = one automatic retry
@@ -87,4 +87,21 @@ class OpenRouterGenerator(Generator):
             if not errs:
                 return card
             error = "; ".join(errs)
+        raise GenerationError(error)
+
+    def generate_details(self, card: dict) -> Details | None:
+        """Separate small call: annotate the card's final sentence. Same retries as `generate`."""
+        messages = [{"role": "system", "content": DETAILS_SYSTEM},
+                    {"role": "user", "content": build_details_prompt(card)}]
+        error = ""
+        for attempt in range(2):
+            msgs = messages if not error else messages + [
+                {"role": "user", "content": f"Your previous answer was invalid: {error}. Fix it and answer again."}]
+            raw = self._call(msgs, DETAILS_JSON_SCHEMA)
+            try:
+                d = Details.model_validate(json.loads(raw))
+            except (json.JSONDecodeError, ValidationError) as e:
+                error = f"schema error: {e}"
+                continue
+            return None if d.is_empty() else d
         raise GenerationError(error)

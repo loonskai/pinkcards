@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from .base import GenerationRequest
 
+DETAILS_RULES = """  * contractions: EVERY merged or elided form in the sentence, as {form, parts}: au/aux = à + le/les, du/des = de + le/les, j'y, qu'il, l'on, -t-il, and so on ("parts" like "que + il"). Empty list if there are none.
+  * words: base forms of the NON-TRIVIAL words, as {form, base, note_ru}: at most ~5, only words a B1 learner may not know, or with a notable form, gender or government. Skip basic function words, articles, pronouns, possessives, common adverbs/time words (trop, tard, mon, demain...) and common forms of être/avoir. EXCLUDE every word that is part of the clozed item or the expression (it already has the base-form line). note_ru is shown in parentheses after the word, so it must be SHORT (a few Russian words) or empty, with no parentheses of its own. For nouns note_ru is just the gender, "m." or "f." (shown as "problème (m.)"), unless a gloss is really needed; then "m., gloss". If the form is already the base form, repeat it in both `form` and `base`.
+  * construction: ONE note on the main grammatical construction around the clozed item (mood or tense choice, agreement, a fixed government like "se rendre compte de"), as {explanation_ru}: 1-2 sentences in Russian, keeping French grammar terms in French. null if nothing is notable.
+  * etymology: of the clozed item's base form ONLY. A short chain with glosses in Russian, as {text_ru, confidence}. If you are not confident, return null. NEVER invent intermediate forms. Report the confidence honestly (high/medium/low)."""
+
 SYSTEM_V1 = """You create ONE Anki cloze flashcard for a Russian-speaking learner of Polish, French or English.
 
 Rules:
@@ -15,7 +20,38 @@ Rules:
 - GRAMMAR: gender (m/f/n) and, for French nouns, article (le/la/l'); for Polish verbs, aspect_pair as "imperfective / perfective" (e.g. "skakać / skoczyć"); otherwise null.
 - HINT: empty unless another common target-language synonym would also fit the Russian prompt; then "не <synonym>".
 - meaning_gloss_ru: short Russian gloss of the chosen meaning.
+- DETAILS: learning notes about the sentence, written to the `details` object. Produce it ONLY if the card's language is in the "details enabled for" list given in the user message; otherwise `details` is null. All explanations are in Russian; target-language terms, forms and examples stay in the target language.
+""" + DETAILS_RULES + """
 Return JSON matching the schema only."""
+
+
+SYSTEM_V2 = SYSTEM_V1  # v2 = v1 + DETAILS rules (kept in one text; details are gated per language in the user prompt)
+
+DETAILS_SYSTEM = """You write learning notes (the `details` object) for ONE existing Anki cloze sentence, for a Russian-speaking learner. Do NOT change or rewrite the sentence; only annotate it.
+
+Rules:
+- All explanations are in Russian; target-language terms, forms and examples stay in the target language.
+- The sentence is given with the cloze either filled in or marked; the clozed item is the "form used".
+""" + DETAILS_RULES + """
+Return JSON matching the schema only."""
+
+
+def details_enabled_line(langs: list[str]) -> str:
+    return (f"Details enabled for: [{', '.join(langs)}]. Produce `details` only if the card's language is one of "
+            f"[{', '.join(langs)}]; otherwise null.")
+
+
+def build_details_prompt(c: dict) -> str:
+    from ..tts.base import tts_text  # filled-in sentence; the cloze is also shown marked
+
+    return "\n".join([
+        f"Language: {c.get('language')}",
+        f"Sentence (cloze filled in): {tts_text(c.get('text'))}",
+        f"Sentence (cloze marked): {c.get('text')}",
+        f"Clozed form used: {c.get('form_used')}",
+        f"Expression (base form of the clozed item): {c.get('expression')}",
+        f"Russian translation: {c.get('translation')}",
+    ])
 
 
 def build_user_prompt(r: GenerationRequest) -> str:
@@ -39,4 +75,6 @@ def build_user_prompt(r: GenerationRequest) -> str:
         L.append("Forms ALREADY USED (do not reuse): " + "; ".join(r.excluded_forms))
     if r.regen_instruction:
         L.append(f"Reviewer's regeneration instruction: {r.regen_instruction}")
+    if r.details_languages is not None:
+        L.append(details_enabled_line(r.details_languages))
     return "\n".join(L)

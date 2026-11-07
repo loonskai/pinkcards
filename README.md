@@ -105,10 +105,11 @@ Status messages:
 
 1. Start Anki with AnkiConnect installed (it listens on `localhost:8765`).
 2. The checks Push needs:
-   - A note type named in `anki.note_type` (default `Cloze`) with fields exactly `Text, Expression, Translation, Picture, HINT, NOTE`, in that order.
+   - A note type named in `anki.note_type` (default `Cloze`) with fields exactly `Text, Expression, Translation, Picture, HINT, NOTE, Audio`, in that order (see "Audio (TTS)" below for `Audio`).
    - Every deck in `[anki.decks]` exists. By default these are `Polish`, `French` and `English`. Create the missing ones, or edit the names or remove languages in `config.toml`.
 3. If "Cloze" turns out to be Anki's built-in note type (different fields), rename your own note type in Anki (for example "Cloze RU") and set `anki.note_type` to it. The app never renames anything for you.
-4. Add a `NOTE` field to the note type if it doesn't have one yet. Don't change the card templates, because the back template should already show `{{NOTE}}`.
+4. Add a `NOTE` field to the note type if it doesn't have one yet. The back template should already show `{{NOTE}}`.
+5. Add the `Audio` field and template by hand, once. See [Audio (TTS)](#audio-tts).
 
 Languages without a deck in `[anki.decks]` are parked as "Unsupported". They become eligible again on the next Sync once you add the deck mapping.
 
@@ -116,14 +117,101 @@ Languages without a deck in `[anki.decks]` are parked as "Unsupported". They bec
 
 Use this if you can't use AnkiConnect. The "Export .apkg" button writes a file to `exports/`, which you import into Anki by hand. Then click "Confirm .apkg imported". It needs AnkiConnect once to read your templates and CSS. For the import to land in your existing note type rather than a copy, `apkg.model_id` must be that note type's id. **Test this on a copy of your collection first.**
 
+## Audio (TTS)
+
+Approved cards get a spoken version of the **target-language sentence with the cloze filled in**. Russian is never read. Audio is generated when you **Approve** (so rejected cards cost nothing), not on Sync. It is stored as `data/audio/pinkcards_<card id>_<hash8>.mp3`. The hash is of the spoken text, so an edited sentence never reuses stale audio. `data/audio/` is git-ignored and **not** part of DB backups, because it can always be regenerated.
+
+In the UI, approved/sent cards have a player and a **Regenerate audio** button. For a card already in Anki, the button also stores the new file in Anki's media folder, updates the note's `Audio` field and deletes the old file. The UI says whether the Anki note was updated. If TTS fails, approval still succeeds and the error shows on the card. **Push refuses cards that should have audio but don't.** They become `failed` with "audio missing: …", and you can fix them with Regenerate audio.
+
+### Config
+
+```toml
+[tts]
+model = "google/gemini-3.8-flash-tts"   # exact OpenRouter speech model id
+format = "mp3"
+audio_dir = "./data/audio"
+
+[tts.languages.fr]
+enabled = true
+voice = "Kore"          # one of the model's supported_voices
+
+[tts.languages.pl]
+enabled = false         # per-language toggle; off = no audio, no cost
+```
+
+A language gets audio only if `enabled = true`, `tts.model` is set **and** that language has a non-empty `voice`. For now only French is on. Polish and English cards are unaffected. Restart after editing.
+
+### Output format (verified against the live API)
+
+`GET /api/v1/models?output_modalities=speech` lists 38 speech models. The Google ones (`google/gemini-3.8-flash-tts`, `google/gemini-3.8-flash-lite-tts`, `google/gemini-3.1-flash-tts-preview`) all have the same 30 voices (Zephyr, Puck, Charon, Kore, Fenrir, Leda, …). Their prices per 1M tokens are $0.5 in / $9 out, $0.5 in / $6 out, and $1 in / $20 out.
+
+**Gemini TTS does not return mp3.** `POST /api/v1/audio/speech` with `response_format: "mp3"` gives `400 Gemini TTS only supports response_format="pcm"`, and `wav` is rejected by OpenRouter's schema. With `pcm` you get raw 24 kHz, 16-bit, mono audio (`content-type: audio/pcm;rate=24000;channels=1`). The app asks for `pcm` from `google/*` models and encodes it to mp3 locally with [`lameenc`](https://pypi.org/project/lameenc/) (a pip wheel, no `ffmpeg` needed). Other providers are asked for `mp3` directly.
+
+### Picking a voice by ear
+
+```bash
+cd backend && uv run anki-cloze inspect tts                       # models, voices, format check; samples for the configured voice
+uv run anki-cloze inspect tts --voices Kore,Puck,Leda,Aoede       # one sample per voice per enabled language
+```
+
+Samples land in `data/audio/_samples/` (`fr_<model>_<voice>.mp3`). Listen, then put your pick in `tts.languages.fr.voice`. Each run makes a few small paid requests.
+
+### One-time Anki setup (manual)
+
+1. In Anki: Tools → Manage Note Types → select your note type (`anki.note_type`) → Fields → **Add** a field named `Audio`. It must be **last**, after `NOTE`.
+2. Cards → **Back Template**: add `{{Audio}}` near the `{{NOTE}}` section. Do **not** add it to the Front Template. It would speak the answer you have to type.
+3. Changing a note type's fields may make Anki ask for a one-way full sync with AnkiWeb the next time you sync. Sync all your devices first.
+
+Until the field exists, Push is refused with "add a field named Audio to note type … -- see README". For `.apkg` export, the templates are read from your collection through AnkiConnect, so they include `{{Audio}}` once you've added it.
+
+## Grammar and word notes ("details")
+
+For languages with details enabled (French for now), the back of each card also gets learning notes about the sentence, in Russian with French terms kept as-is. They go into the existing **`NOTE`** field. There is no new Anki field and no change to the note type, apart from optional styling.
+
+```toml
+[details.languages.fr]
+enabled = true          # per-language toggle; off = NOTE looks exactly as before
+
+[details.languages.pl]
+enabled = false
+```
+
+What you get, in this order (empty sections are left out):
+
+```
+Base form: se rendre compte (de qch)
+Слияния: qu'il = que + il · du = de + le
+Формы: faut → falloir (безличный) · problème (m.)
+Грамматика: после «il faut que» — subjonctif présent. …
+Этимология: rendre ← нар.-лат. *rendere ← лат. reddere …
+Notes                                   ← source line, always last
+```
+
+- The notes are generated in the **same LLM call as the card, at Sync** (`generator.prompt_version = "v2"`). Only languages with details enabled are asked for them, and the code drops them for any other language even if the model returns them. The HTML is built in code (`generator/note.py`). All LLM text is escaped.
+- **Etymology comes from the LLM only. It is not verified against any dictionary.** The model reports its confidence. `low` or "not sure" means the line is dropped, and `medium` is shown with a trailing **(?)**. Treat it as a hint.
+- If you **edit the sentence** (`text`) of a card, its notes are marked **stale** (a badge in the UI) but are not rebuilt automatically. Editing only the base form or grammar keeps them. Approving a stale card regenerates its notes first, so stale notes never reach Anki.
+- **Regenerate notes** (button on generated, approved, failed and sent cards) re-asks the LLM for just the notes about the unchanged sentence, rebuilds `NOTE`, and doesn't reset approval. For a card that is **already in Anki**, it also overwrites that note's `NOTE` field through AnkiConnect (`updateNoteFields`) and tells you whether that worked. This replaces any manual edits you made to `NOTE` in Anki. Existing cards are not touched until you click it.
+
+### Styling in Anki (optional, once)
+
+In Anki: Tools → Manage Note Types → select your note type → Cards → **Styling**, and add:
+
+```css
+.pc-details { font-size: 0.85em; text-align: left; margin-top: 0.6em; line-height: 1.4; }
+.pc-details .pc-label { font-weight: 600; }
+.pc-source { font-size: 0.75em; opacity: 0.6; margin-top: 0.6em; }
+```
+
+Without it the content still shows, just unstyled. The back template should already show `{{NOTE}}`. For `.apkg` export the CSS is read from your collection, so it's included once you've added it.
+
 ## Daily use
 
 1. Add words: pink highlights in Kindle or Zotero, or rows in your sheets.
 2. **Sync** backs up the database, pulls new items, and generates up to `sync.max_cards_per_sync` (50) cards. Words from Google Sheets are generated first, then Kindle/Zotero, oldest first. Repeat Sync to work through a backlog.
 3. Review in the queue. You can approve, edit, regenerate (with an optional instruction), change the language, add another meaning, add a new form, or reject. Cards flagged "already known" default to skip. "Add new form" gives you another inflection of the same word.
-4. **Push to Anki** sends approved cards. Failed ones stay queued for retry.
+4. **Push to Anki** sends approved cards (with their audio). Failed ones stay queued for retry.
 
-Card format: `Text` is the cloze sentence, `Expression` is the base form, and `Translation` is Russian with the answer in `<b>`. `NOTE` holds the base form (when it differs) and the source line.
+Card format: `Text` is the cloze sentence, `Expression` is the base form, and `Translation` is Russian with the answer in `<b>`. `NOTE` holds the base form (when it differs), the optional [details](#grammar-and-word-notes-details) and the source line.
 
 Tags added to every note: `auto`, `src::kindle|zotero|sheets`, and `book::<title-slug>` for Kindle and Zotero.
 
@@ -133,6 +221,7 @@ Run from `backend/`:
 
 ```bash
 uv run anki-cloze inspect readwise|zotero|sheets [--limit 10] [--save file.json]
+uv run anki-cloze inspect tts [--voices Kore,Puck]   # speech models, format check, voice samples
 uv run anki-cloze backup
 uv run anki-cloze restore <backup-file>     # backs up the current DB first
 ```
@@ -145,7 +234,7 @@ The database (`data/anki-cloze.db`) is backed up automatically before every Sync
 
 ## Configuration reference
 
-`config.toml` sections: `[store]`, `[sync]`, `[readwise]`, `[zotero]`, `[gsheets]` and `[gsheets.sheets]`, `[generator]`, `[anki]` and `[anki.decks]`, `[apkg]`, `[lang]`. Every key has a comment or a sensible default. Secrets never go in it.
+`config.toml` sections: `[store]`, `[sync]`, `[readwise]`, `[zotero]`, `[gsheets]` and `[gsheets.sheets]`, `[generator]`, `[anki]` and `[anki.decks]`, `[tts]` and `[tts.languages.*]`, `[details.languages.*]`, `[apkg]`, `[lang]`. Every key has a comment or a sensible default. Secrets never go in it.
 
 ## Troubleshooting
 
@@ -160,6 +249,9 @@ The database (`data/anki-cloze.db`) is backed up automatically before every Sync
 | Google down | See the status messages in step 4. |
 | AnkiConnect down | Anki isn't running, or AnkiConnect isn't installed. |
 | AnkiConnect: fields mismatch or deck missing | See step 5. |
+| `add a field named Audio …` | See [Audio (TTS)](#audio-tts). |
+| Card `failed` with `audio missing: …` | Click **Regenerate audio**, then Push again. |
+| `OpenRouter TTS failed: HTTP 400 …` | Wrong `tts.model` or `voice`. Run `inspect tts`. |
 | Config change has no effect | Restart `npm run dev`. |
 
 ## Extending

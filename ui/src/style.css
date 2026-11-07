@@ -25,3 +25,21 @@ button.danger { color: #c92a2a; }
 .edit { display: grid; gap: 6px; } .edit label { display: grid; font-size: 12px; color: #555; gap: 2px; }
 .edit label.inline { display: flex; align-items: center; gap: 6px; }
 .edit textarea, .edit input, input.small { padding: 5px; font: inherit; } .row { display: flex; gap: 10px; }
+
+.tabs { display: flex; gap: 4px; border-bottom: 2px solid #ddd; margin: 8px 0; position: sticky; top: 38px; background: #f6f6f8; z-index: 1; }
+.tab { border: none; border-bottom: 3px solid transparent; border-radius: 6px 6px 0 0; background: none; padding: 8px 16px; font-weight: 600; margin-bottom: -2px; }
+.tab.active { background: #fff; border-bottom-color: #1c7ed6; color: #1c7ed6; }
+.tab .count { background: #e9ecef; color: #555; border-radius: 10px; padding: 0 7px; font-size: 12px; margin-left: 4px; }
+.tab.active .count { background: #d0ebff; color: #1c7ed6; }
+.selectall { display: flex; gap: 6px; align-items: center; font-size: 13px; color: #555; margin: 6px 0; }
+
+.audiobar { display: flex; gap: 10px; align-items: center; margin: 8px 0; flex-wrap: wrap; }
+.audiobar audio, .section.audio audio { height: 34px; }
+.spinner { display: inline-block; width: 11px; height: 11px; margin-right: 6px; border: 2px solid #adb5bd; border-top-color: #1c7ed6; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -1px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* same classes as the Anki note type's Styling (see README) so the preview matches the card */
+.pc-details { font-size: 0.85em; text-align: left; margin-top: 0.6em; line-height: 1.4; }
+.pc-details .pc-label { font-weight: 600; }
+.pc-source { font-size: 0.75em; opacity: 0.6; margin-top: 0.6em; }
+button.play { font-size: 15px; padding: 4px 14px; }

@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import Body, FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import load_settings
@@ -16,13 +17,14 @@ from .sources.readwise import ReadwiseSource
 from .sources.zotero import ZoteroSource
 from .status import collect_status
 from .store.db import Store, connect
+from .tts.openrouter import OpenRouterTTS
 
 
 def build_service() -> Service:
     s = load_settings()
     store = Store(connect(s.db_path))
     sources = {"readwise": ReadwiseSource(s), "zotero": ZoteroSource(s), "gsheets": GsheetsSource(s)}
-    return Service(s, store, sources, OpenRouterGenerator(s), AnkiConnect(s))
+    return Service(s, store, sources, OpenRouterGenerator(s), AnkiConnect(s), OpenRouterTTS(s))
 
 
 svc: Service = None  # type: ignore
@@ -42,6 +44,11 @@ app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http
 
 def _card(c: dict) -> dict:
     c["validation_errors"] = validate_card(c) if c.get("text") else ["no content"]
+    c["details_enabled"] = svc.s.details_enabled(c.get("language"))
+    c["details_stale"] = bool(c.get("details_stale"))
+    c["audio_enabled"] = svc.s.tts_enabled(c.get("language"))
+    c["audio_url"] = f"/api/cards/{c['id']}/audio" \
+        if c.get("audio_file") and svc.audio_path(c["audio_file"]).is_file() else None
     c["flagged"] = bool(c.get("already_known")) or c.get("language_confidence") == "low"
     return c
 
@@ -58,12 +65,12 @@ def _need_card(card_id: int) -> dict:
 
 @app.get("/api/status")
 def status():
-    return collect_status(svc.s, svc.sources, svc.gen, svc.anki)
+    return collect_status(svc.s, svc.sources, svc.gen, svc.anki, svc.tts)
 
 
 @app.post("/api/sync")
 def sync():
-    st = collect_status(svc.s, svc.sources, svc.gen, svc.anki)
+    st = collect_status(svc.s, svc.sources, svc.gen, svc.anki, svc.tts)
     if not st["sync"]["enabled"]:
         raise HTTPException(409, st["sync"]["reason"])
     return svc.sync()
@@ -125,6 +132,44 @@ def another_meaning(card_id: int):
 def new_form(card_id: int):
     _need_card(card_id)
     return _card(svc.add_child(card_id, CardKind.NEW_FORM))
+
+
+@app.get("/api/cards/{card_id}/audio")
+def card_audio(card_id: int):
+    c = _need_card(card_id)
+    if not c.get("audio_file") or not svc.audio_path(c["audio_file"]).is_file():
+        raise HTTPException(404, "no audio")
+    return FileResponse(svc.audio_path(c["audio_file"]), media_type="audio/mpeg")
+
+
+@app.post("/api/cards/{card_id}/regenerate-audio")
+def regenerate_audio(card_id: int):
+    _need_card(card_id)
+    try:
+        r = svc.regenerate_audio(card_id)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    return {**_card(r["card"]), "anki": r["anki"]}
+
+
+@app.post("/api/cards/{card_id}/regenerate-details")
+def regenerate_details(card_id: int):
+    _need_card(card_id)
+    try:
+        r = svc.regenerate_details(card_id)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    return {**_card(r["card"]), "anki": r["anki"], "details_error": r.get("error")}
+
+
+@app.post("/api/cards/{card_id}/resend-to-anki")
+def resend_to_anki(card_id: int):
+    _need_card(card_id)
+    try:
+        r = svc.resend_to_anki(card_id)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    return {**_card(r["card"]), "anki": r["anki"]}
 
 
 @app.post("/api/push")

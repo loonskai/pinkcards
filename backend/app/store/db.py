@@ -36,7 +36,7 @@ def migrate(conn: sqlite3.Connection) -> None:
             conn.commit()
 
 
-_JSON_COLS = {"grammar", "tags", "raw"}
+_JSON_COLS = {"grammar", "tags", "raw", "details"}
 
 
 def _row(r: sqlite3.Row | None) -> dict | None:
@@ -132,7 +132,10 @@ class Store:
     _CARD_COLS = ["source_note_id", "parent_card_id", "kind", "language", "language_confidence", "language_reason",
                   "text", "expression", "form_used", "is_base_form", "grammar", "translation", "hint", "note",
                   "tags", "deck", "meaning_gloss_ru", "already_known", "status", "anki_note_id", "error",
-                  "model", "prompt_version", "regen_instruction"]
+                  "model", "prompt_version", "regen_instruction",
+                  "audio_file", "audio_text_hash", "audio_model", "audio_voice", "audio_error", "audio_at",
+                  "details", "details_stale"]
+    _AUDIO_COLS = {"audio_file", "audio_text_hash", "audio_model", "audio_voice", "audio_error", "audio_at"}
 
     def insert_card(self, **f) -> int:
         for k in _JSON_COLS & f.keys():
@@ -160,7 +163,7 @@ class Store:
         self.conn.execute(f"UPDATE cards SET {sets}, updated_at=? WHERE id=?", [*f.values(), now(), id])
         if "status" in f and old and old[0] != f["status"]:
             self.log("card", id, "status", old[0], f["status"], f.get("error"))
-        elif f.keys() - {"status", "error", "anki_note_id"}:
+        elif f.keys() - {"status", "error", "anki_note_id"} - self._AUDIO_COLS:
             self.log("card", id, "edited", detail=",".join(sorted(f)))
         self.conn.commit()
 
